@@ -1,0 +1,57 @@
+[version history]
+
+1.0 -> 1.0.0
+-
+1.5 -> 1.1.0
+-
+1.75 -> 1.2.0
+-
+2.0 -> 1.3.0
+-
+2.25 -> 1.3.1
+-
+2.5 -> 1.4.0
+-
+2.75 -> 1.4.1
+-
+3.0 -> 1.4.2
+-
+3.5 -> 1.5.0
+-
+3.75 -> 1.5.1
+-
+4.0 -> 1.5.2
+-
+4.5 -> 1.5.3
+-
+4.75c (Basic) -> 1.5.4_B
+-
+4.75 -> 1.5.4
+-
+5.0 -> 1.6.0
+-
+5.5 -> 1.6.1
+-
+5.75 -> 1.6.2
+-
+6.0 -> 1.6.3
+-
+6.0_c (Basic) -> 2.0.0_B
+-
+7.1 -> 2.0.0
+-
+9.1 -> 3.0.0
+-
+9.6 -> 3.0.1
+-
+10.0 -> 3.0.2
+
+
+As with the above version changes, we will follow the previous T2Editor version and the future T2editor version name in semantic versioning.
+Semantic versioning:
+Form: MAJOR.MINOR.PATCH (ex 2.3.5)
+MAJOR (Main Version): Increase by 1 for large structural changes that break compatibility
+MINOR (Side Version): Increase by 1 when adding new features that are backward compatible
+PATCH (corrected version): 1 for bug fixes and small improvements
+Prerelease tags (optional): -alpha, -beta, -rc, etc. show stabilization steps
+Unify all by increasing integers and separate digits by meaning
