@@ -1,0 +1,662 @@
+이 가이드를 클로드에게 주면 editor.lib.php, core.js, utils.js, core.css만으로도 플러그인 개발 가능.
+If you give this guide to Claude, you can develop plug-ins with editor.lib.php, core.js, utils.js, and core.css.
+
+
+# T2Editor 플러그인 개발 가이드
+
+## 목차
+1. [플러그인 시스템 개요](#1-플러그인-시스템-개요)
+2. [플러그인 기본 구조](#2-플러그인-기본-구조)
+3. [플러그인 생명주기](#3-플러그인-생명주기)
+4. [새 플러그인 만들기](#4-새-플러그인-만들기)
+5. [기존 플러그인 수정하기](#5-기존-플러그인-수정하기)
+6. [고급 기능](#6-고급-기능)
+7. [디버깅 및 테스트](#7-디버깅-및-테스트)
+
+---
+
+## 1. 플러그인 시스템 개요
+
+T2Editor는 모듈화된 플러그인 시스템을 사용합니다. 각 플러그인은 독립적으로 작동하며, 에디터의 기능을 확장합니다.
+
+### 플러그인 로딩 흐름
+```javascript
+// core.js에서 플러그인 로딩
+loadPlugins() {
+    this.config.plugins.forEach(pluginName => {
+        this.loadPlugin(pluginName);
+    });
+}
+
+async loadPlugin(name) {
+    const script = document.createElement('script');
+    script.src = `${t2editor_url}/plugin/${name}/${name}.js`;
+    script.onload = () => {
+        const PluginClass = window[`T2${name.charAt(0).toUpperCase() + name.slice(1)}Plugin`];
+        const plugin = new PluginClass(this);
+        this.plugins.set(name, plugin);
+    };
+    document.head.appendChild(script);
+}
+```
+
+### 플러그인 파일 구조
+```
+T2Editor/
+├── plugin/
+│   ├── yourplugin/
+│   │   ├── yourplugin.js      # 메인 플러그인 파일
+│   │   └── yourplugin_upload.php  # 서버사이드 처리 (선택)
+```
+
+---
+
+## 2. 플러그인 기본 구조
+
+모든 플러그인은 다음 기본 구조를 따릅니다:
+
+```javascript
+class T2YourpluginPlugin {
+    constructor(editor) {
+        this.editor = editor;  // T2Editor 인스턴스 참조
+        this.commands = ['commandName'];  // 툴바 버튼과 연결될 명령어
+        this.config = null;  // 플러그인 설정
+        this.init();  // 초기화
+    }
+
+    init() {
+        // 플러그인 초기화 로직
+    }
+
+    // 필수: 명령어 처리
+    handleCommand(command, button) {
+        switch(command) {
+            case 'commandName':
+                this.yourMethod();
+                break;
+        }
+    }
+
+    // 선택: 붙여넣기 처리
+    handlePaste(clipboardData) {
+        // true 반환시 기본 붙여넣기 방지
+        return false;
+    }
+
+    // 선택: 컨텐츠 설정 시 호출
+    onContentSet(html) {
+        // 에디터 컨텐츠가 설정될 때 처리
+    }
+}
+
+// 전역 등록 (필수!)
+window.T2YourpluginPlugin = T2YourpluginPlugin;
+```
+
+---
+
+## 3. 플러그인 생명주기
+
+### 3.1 초기화 단계
+```javascript
+constructor(editor) {
+    this.editor = editor;
+    // 1. 에디터 참조 저장
+    // 2. 명령어 등록
+    // 3. 설정 로드
+}
+```
+
+### 3.2 명령어 처리
+```javascript
+handleCommand(command, button) {
+    // 툴바 버튼 클릭 시 호출
+    // command: 명령어 이름
+    // button: 클릭된 버튼 엘리먼트
+}
+```
+
+### 3.3 이벤트 후킹
+```javascript
+// 붙여넣기 이벤트
+handlePaste(clipboardData) {
+    // 클립보드 데이터 처리
+    // true 반환: 기본 동작 방지
+    // false 반환: 기본 동작 수행
+}
+
+// 컨텐츠 로드
+onContentSet(html) {
+    // 에디터에 HTML이 설정된 후
+    // 기존 컨텐츠 처리나 초기화
+}
+```
+
+---
+
+## 4. 새 플러그인 만들기
+
+### 예제: Emoji 플러그인 만들기
+
+#### Step 1: 플러그인 파일 생성
+`plugin/emoji/emoji.js` 파일 생성:
+
+```javascript
+class T2EmojiPlugin {
+    constructor(editor) {
+        this.editor = editor;
+        this.commands = ['insertEmoji'];
+        this.emojis = ['😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘'];
+    }
+
+    handleCommand(command, button) {
+        switch(command) {
+            case 'insertEmoji':
+                this.showEmojiPicker(button);
+                break;
+        }
+    }
+
+    showEmojiPicker(button) {
+        // 이모지 선택 팔레트 생성
+        const picker = document.createElement('div');
+        picker.className = 't2-emoji-picker';
+        picker.style.cssText = `
+            background: white;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 4px;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            min-width: 200px;
+        `;
+
+        // 이모지 버튼 추가
+        this.emojis.forEach(emoji => {
+            const emojiBtn = document.createElement('button');
+            emojiBtn.textContent = emoji;
+            emojiBtn.style.cssText = `
+                font-size: 20px;
+                border: none;
+                background: none;
+                cursor: pointer;
+                padding: 5px;
+                border-radius: 4px;
+                transition: background 0.2s;
+            `;
+            
+            emojiBtn.onmouseover = () => {
+                emojiBtn.style.background = '#f0f0f0';
+            };
+            
+            emojiBtn.onmouseout = () => {
+                emojiBtn.style.background = 'none';
+            };
+
+            emojiBtn.onclick = (e) => {
+                e.preventDefault();
+                this.insertEmoji(emoji);
+                picker.parentElement.remove();
+            };
+
+            picker.appendChild(emojiBtn);
+        });
+
+        // 드롭다운으로 표시
+        this.editor.showDropdown(picker, button);
+    }
+
+    insertEmoji(emoji) {
+        // 현재 커서 위치에 이모지 삽입
+        document.execCommand('insertText', false, emoji);
+        
+        // 변경사항 저장
+        this.editor.createUndoPoint();
+        this.editor.autoSave();
+    }
+}
+
+// 전역 등록
+window.T2EmojiPlugin = T2EmojiPlugin;
+```
+
+#### Step 2: 툴바 버튼 추가
+`editor.lib.php`에서 툴바에 버튼 추가:
+
+```html
+<button class="t2-btn" data-command="insertEmoji">
+    <span class="material-icons">mood</span>
+</button>
+```
+
+#### Step 3: 플러그인 등록
+`editor.lib.php`에서 플러그인 로드 섹션에 추가:
+
+```javascript
+// 플러그인 로드
+$plugins = ['image', 'video', 'file', 'table', 'code', 'link', 'export', 'emoji'];
+```
+
+---
+
+## 5. 기존 플러그인 수정하기
+
+### 예제: Image 플러그인에 워터마크 기능 추가
+
+```javascript
+// image.js 수정
+class T2ImagePlugin {
+    constructor(editor) {
+        // 기존 코드...
+        this.watermarkText = 'T2Editor';  // 워터마크 텍스트
+    }
+
+    // 이미지 업로드 후 워터마크 추가
+    async handleUrlImageUpload(url) {
+        try {
+            const { blob, width, height } = await this.captureImage(url);
+            
+            // 워터마크 추가
+            const watermarkedBlob = await this.addWatermark(blob, width, height);
+            
+            const fileName = `image_${Date.now()}.jpg`;
+            const file = new File([watermarkedBlob], fileName, { type: 'image/jpeg' });
+            
+            // 기존 업로드 로직...
+        } catch (error) {
+            // 에러 처리...
+        }
+    }
+
+    // 워터마크 추가 메소드
+    async addWatermark(blob, width, height) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                canvas.width = width;
+                canvas.height = height;
+                
+                // 이미지 그리기
+                ctx.drawImage(img, 0, 0);
+                
+                // 워터마크 텍스트 추가
+                ctx.font = '20px Arial';
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(this.watermarkText, width - 10, height - 10);
+                
+                // 새 blob 생성
+                canvas.toBlob((newBlob) => {
+                    resolve(newBlob);
+                }, 'image/jpeg', 0.9);
+            };
+            img.src = URL.createObjectURL(blob);
+        });
+    }
+}
+```
+
+---
+
+## 6. 고급 기능
+
+### 6.1 모달 창 사용
+```javascript
+showCustomModal() {
+    const modalContent = `
+        <div class="t2-custom-modal">
+            <h3>모달 제목</h3>
+            <input type="text" class="t2-input" placeholder="입력하세요">
+            <div class="t2-btn-group">
+                <button class="t2-btn" data-action="cancel">취소</button>
+                <button class="t2-btn" data-action="confirm">확인</button>
+            </div>
+        </div>
+    `;
+    
+    const modal = T2Utils.createModal(modalContent);
+    
+    // 이벤트 처리
+    modal.querySelector('[data-action="confirm"]').onclick = () => {
+        const value = modal.querySelector('.t2-input').value;
+        // 처리 로직
+        modal.remove();
+    };
+}
+```
+
+### 6.2 서버 통신
+```javascript
+async uploadToServer(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('uid', this.editor.generateUid());
+    
+    try {
+        const response = await fetch(`${t2editor_url}/plugin/yourplugin/upload.php`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            return data.url;
+        }
+    } catch (error) {
+        T2Utils.showNotification('업로드 실패', 'error');
+    }
+}
+```
+
+### 6.3 커스텀 블록 생성
+```javascript
+createCustomBlock(content) {
+    const block = document.createElement('div');
+    block.className = 't2-custom-block';
+    block.contentEditable = false;
+    
+    // 내용 추가
+    block.innerHTML = `
+        <div class="t2-custom-content">${content}</div>
+    `;
+    
+    // 컨트롤 추가
+    const controls = document.createElement('div');
+    controls.className = 't2-media-controls';
+    controls.innerHTML = `
+        <button class="t2-btn" onclick="this.closest('.t2-custom-block').remove()">
+            <span class="material-icons">delete</span>
+        </button>
+    `;
+    
+    block.appendChild(controls);
+    
+    // 에디터에 삽입
+    this.editor.insertAtCursor(block);
+}
+```
+
+### 6.4 스타일 추가
+```javascript
+// 플러그인 스타일 추가
+const style = document.createElement('style');
+style.textContent = `
+    .t2-custom-block {
+        border: 1px solid #ddd;
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+    }
+    
+    /* 다크모드 지원 */
+    html[data-t2editor-theme="dark"] .t2-custom-block {
+        border-color: #444;
+        background: #2a2a2a;
+    }
+`;
+
+if (!document.querySelector('#t2-yourplugin-styles')) {
+    style.id = 't2-yourplugin-styles';
+    document.head.appendChild(style);
+}
+```
+
+---
+
+## 7. 디버깅 및 테스트
+
+### 7.1 콘솔 로깅
+```javascript
+handleCommand(command, button) {
+    console.log('Command received:', command);
+    console.log('Button element:', button);
+    console.log('Editor state:', this.editor);
+}
+```
+
+### 7.2 에러 처리
+```javascript
+try {
+    // 위험한 작업
+    await this.riskyOperation();
+} catch (error) {
+    console.error('Plugin error:', error);
+    T2Utils.showNotification('작업 중 오류가 발생했습니다', 'error');
+}
+```
+
+### 7.3 테스트 체크리스트
+- [ ] 툴바 버튼이 정상 작동하는가?
+- [ ] 실행 취소/다시 실행이 작동하는가?
+- [ ] 자동 저장이 작동하는가?
+- [ ] 다크모드에서 UI가 정상인가?
+- [ ] 모바일/태블릿에서 작동하는가?
+- [ ] 다른 플러그인과 충돌이 없는가?
+
+---
+
+## 유용한 에디터 메소드
+
+```javascript
+// 현재 선택 영역 저장/복원
+this.editor.saveSelection();
+this.editor.restoreSelection();
+
+// 실행 취소 포인트 생성
+this.editor.createUndoPoint();
+
+// 자동 저장 트리거
+this.editor.autoSave();
+
+// 컨텐츠 정규화
+this.editor.normalizeContent();
+
+// 가장 가까운 블록 요소 찾기
+const block = this.editor.getClosestBlock(node);
+
+// 커서 위치에 요소 삽입
+this.editor.insertAtCursor(element);
+
+// 문자 수 업데이트
+this.editor.updateCharCount();
+
+// 고유 ID 생성
+const uid = this.editor.generateUid();
+```
+
+---
+
+## 플러그인 개발 팁
+
+1. **명명 규칙**: 클래스명은 `T2[PluginName]Plugin` 형식을 따르세요
+2. **의존성 관리**: 다른 플러그인에 의존하는 경우 `this.editor.getPlugin('name')`으로 접근
+3. **성능 고려**: DOM 조작은 최소화하고 필요시 `requestAnimationFrame` 사용
+4. **접근성**: 키보드 네비게이션과 스크린 리더 지원 고려
+5. **국제화**: 하드코딩된 텍스트 대신 설정 가능한 옵션으로
+
+
+추가 가이드:
+# T2Editor 플러그인 개발 핵심 개념 가이드
+
+## 1. T2Editor 아키텍처 이해
+
+### 1.1 에디터의 계층 구조
+- **컨테이너**: 전체 에디터를 감싸는 최상위 요소
+- **툴바**: 명령어 버튼들의 집합
+- **에디터**: contenteditable 영역 (실제 편집이 일어나는 곳)
+- **상태바**: 하단 정보 표시 영역
+
+### 1.2 데이터 흐름
+- 사용자 입력 → DOM 변경 → normalizeContent → 실행취소 포인트 → 자동저장
+- 모든 변경사항은 이 흐름을 거쳐야 일관성 유지
+
+### 1.3 명령어 시스템
+- 툴바 버튼의 `data-command` 속성이 플러그인의 `commands` 배열과 매칭
+- 명령어는 플러그인 간 중복되지 않아야 함
+- 한 플러그인이 여러 명령어를 처리할 수 있음
+
+## 2. 중요한 동작 원리
+
+### 2.1 Selection과 Range
+- 브라우저의 Selection API는 매우 취약함
+- 모달이나 드롭다운 표시 전 반드시 현재 선택 영역 저장
+- DOM 조작 후 선택 영역이 사라질 수 있으므로 복원 필요
+
+### 2.2 Block 단위 사고
+- T2Editor는 블록(p, div 등) 단위로 컨텐츠 관리
+- 텍스트 노드가 에디터 직계 자식이 되면 자동으로 p 태그로 감싸짐
+- 미디어 요소는 반드시 블록으로 감싸져야 함
+
+### 2.3 contentEditable의 특성
+- 브라우저마다 contentEditable 동작이 다름
+- iOS Safari는 특히 독특한 동작을 보임
+- 빈 블록은 `<br>` 또는 `\u200B`(zero-width space)가 필요
+
+## 3. 플러그인 간 협업
+
+### 3.1 플러그인 의존성
+- 플러그인은 독립적이어야 하지만 필요시 다른 플러그인 참조 가능
+- `this.editor.getPlugin('name')`으로 다른 플러그인 접근
+- 순환 의존성 주의
+
+### 3.2 이벤트 전파
+- handlePaste에서 true 반환시 다른 플러그인이 처리 못함
+- 명령어 처리는 먼저 매칭된 플러그인이 독점
+- 전역 이벤트 리스너 추가시 충돌 고려
+
+### 3.3 공통 리소스
+- CSS 클래스명은 `t2-플러그인명-*` 규칙 준수
+- 전역 변수 사용 최소화
+- DOM ID는 고유성 보장 필요
+
+## 4. 상태 관리의 중요성
+
+### 4.1 에디터 상태
+- 실행취소/재실행 스택은 에디터가 관리
+- 플러그인은 DOM 변경 후 반드시 `createUndoPoint()` 호출
+- 자동저장 상태도 에디터가 중앙 관리
+
+### 4.2 플러그인 내부 상태
+- constructor에서 초기화된 상태는 에디터 생명주기 동안 유지
+- 모달이나 임시 상태는 로컬 변수로 관리
+- 설정값은 this.config에 저장
+
+### 4.3 DOM 상태와 동기화
+- DOM이 진실의 원천(source of truth)
+- 내부 상태와 DOM이 불일치하면 버그 발생
+- `normalizeContent()` 호출로 DOM 정리
+
+## 5. 성능과 메모리 관리
+
+### 5.1 이벤트 리스너
+- 모달이나 드롭다운 제거시 이벤트 리스너도 제거
+- 전역 이벤트는 플러그인 파괴시 정리 필요
+- ResizeObserver, MutationObserver는 disconnect 필수
+
+### 5.2 DOM 조작 최적화
+- 대량 DOM 조작은 DocumentFragment 사용
+- 리플로우 최소화를 위해 일괄 처리
+- 애니메이션은 CSS transition 우선 사용
+
+### 5.3 메모리 누수 방지
+- 클로저에서 DOM 요소 참조 주의
+- 대용량 데이터는 사용 후 null 할당
+- Blob URL은 사용 후 revoke
+
+## 6. 보안 고려사항
+
+### 6.1 XSS 방지
+- 사용자 입력은 항상 이스케이프
+- innerHTML 사용시 신뢰할 수 있는 데이터만
+- execCommand 사용이 innerHTML보다 안전
+
+### 6.2 파일 업로드
+- 클라이언트와 서버 모두에서 검증
+- 파일 타입은 확장자와 MIME 타입 모두 확인
+- 업로드 경로 조작 방지
+
+### 6.3 CORS와 외부 리소스
+- 외부 이미지나 리소스 로드시 CORS 정책 확인
+- proxy나 서버사이드 다운로드 고려
+- 민감한 정보가 외부로 전송되지 않도록 주의
+
+## 7. 브라우저 호환성
+
+### 7.1 기능 감지
+- 기능 존재 여부를 먼저 확인
+- Polyfill보다는 대체 구현 선호
+- 모던 브라우저 기준으로 개발, 구형은 우아한 성능 저하
+
+### 7.2 모바일 고려사항
+- 터치 이벤트와 마우스 이벤트 동시 지원
+- 가상 키보드로 인한 뷰포트 변경 대응
+- 모바일에서는 hover 효과 대신 명확한 시각적 피드백
+
+### 7.3 CSS 호환성
+- flexbox, grid는 안전하게 사용 가능
+- 벤더 프리픽스는 필요시만 추가
+- calc(), CSS 변수는 폴백 제공
+
+## 8. 디버깅 철학
+
+### 8.1 문제 격리
+- 최소 재현 케이스 만들기
+- 다른 플러그인 비활성화로 간섭 확인
+- 브라우저 개발자 도구 활용
+
+### 8.2 로깅 전략
+- 개발 중에는 상세 로깅
+- 프로덕션에서는 에러만 로깅
+- 성능 영향 최소화
+
+### 8.3 에러 처리
+- 예상 가능한 에러는 try-catch로 처리
+- 사용자에게는 친숙한 메시지 표시
+- 에러 발생해도 에디터는 계속 작동해야 함
+
+## 9. 플러그인 품질 체크리스트
+
+### 9.1 기능적 완성도
+- 모든 엣지 케이스 처리
+- 실행취소/재실행 완벽 지원
+- 자동저장과의 호환성
+
+### 9.2 사용자 경험
+- 직관적인 인터페이스
+- 빠른 반응 속도
+- 명확한 피드백
+
+### 9.3 코드 품질
+- 일관된 코딩 스타일
+- 적절한 주석
+- 확장 가능한 구조
+
+## 10. 흔한 실수와 해결책
+
+### 10.1 Range/Selection 소실
+- 문제: 모달 표시 후 선택 영역 사라짐
+- 해결: 모달 표시 전 saveSelection(), 닫을 때 restoreSelection()
+
+### 10.2 이벤트 버블링
+- 문제: 클릭 이벤트가 에디터까지 전파
+- 해결: e.stopPropagation() 적절히 사용
+
+### 10.3 비동기 처리
+- 문제: 파일 업로드 중 다른 작업으로 상태 꼬임
+- 해결: 작업 중 UI 비활성화, 완료 후 활성화
+
+### 10.4 메모리 누수
+- 문제: 모달 닫아도 이벤트 리스너 남음
+- 해결: 명시적으로 removeEventListener 호출
+
+### 10.5 스타일 충돌
+- 문제: 전역 CSS가 플러그인 UI 영향
+- 해결: 구체적인 셀렉터 사용, CSS 모듈화
+
+이러한 개념들을 이해하고 있다면, T2Editor 플러그인을 안정적이고 효율적으로 개발할 수 있습니다. 각 개념은 실제 개발 과정에서 반드시 마주치게 될 중요한 요소들입니다.​​​​​​​​​​​​​​​​
