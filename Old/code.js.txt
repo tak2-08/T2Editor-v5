@@ -1,0 +1,174 @@
+//Path: T2Editor/plugin/code/code.js
+
+class T2CodePlugin {
+constructor(editor) {
+this.editor = editor;
+this.commands = [‘insertCodeBlock’];
+}
+
+handleCommand(command, button) {
+    switch(command) {
+        case 'insertCodeBlock':
+            this.insertCodeBlock();
+            break;
+    }
+}
+
+onContentSet(html) {
+    // 컨텐츠 설정 시 코드 블록 초기화
+    setTimeout(() => {
+        this.initializeCodeBlocks();
+    }, 100);
+}
+
+insertCodeBlock() {
+    const code = document.createElement('div');
+    code.className = 't2-code-block';
+    code.contentEditable = false; // 코드 블록 전체는 편집 불가
+    
+    const pre = document.createElement('pre');
+    const codeElement = document.createElement('code');
+    codeElement.textContent = '코드를 입력하세요';
+    codeElement.classList.add('code-placeholder');
+    codeElement.setAttribute('contenteditable', 'true');
+    pre.appendChild(codeElement);
+    
+    this.setupCodeEvents(codeElement);
+    
+    code.appendChild(pre);
+    this.editor.insertAtCursor(code);
+}
+
+setupCodeEvents(codeElement) {
+    // 이미 이벤트가 설정되어 있으면 스킵
+    if (codeElement.dataset.eventsSetup === 'true') {
+        return;
+    }
+
+    // 코드 블록 클릭 이벤트
+    codeElement.addEventListener('click', function(e) {
+        if (this.classList.contains('code-placeholder')) {
+            this.textContent = '';
+            this.classList.remove('code-placeholder');
+            // 커서 위치를 처음으로 설정
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.setStart(this, 0);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+    });
+
+    // 코드 블록 포커스 이벤트
+    codeElement.addEventListener('focus', function(e) {
+        if (this.classList.contains('code-placeholder')) {
+            this.textContent = '';
+            this.classList.remove('code-placeholder');
+        }
+    });
+
+    // 코드 블록 블러 이벤트
+    codeElement.addEventListener('blur', function() {
+        if (this.textContent.trim() === '') {
+            this.textContent = '코드를 입력하세요';
+            this.classList.add('code-placeholder');
+        }
+    });
+
+    // 키보드 이벤트 추가
+    codeElement.addEventListener('keydown', (e) => {
+        // Tab 키 처리
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            document.execCommand('insertText', false, '    '); // 4칸 들여쓰기
+        }
+        
+        // Enter 키 처리 (줄바꿈 허용)
+        if (e.key === 'Enter') {
+            // 기본 동작 허용 (줄바꿈)
+            e.stopPropagation(); // 에디터의 Enter 처리와 충돌 방지
+        }
+    });
+
+    // 입력 이벤트
+    codeElement.addEventListener('input', () => {
+        this.editor.createUndoPoint();
+        this.editor.autoSave();
+    });
+
+    // 이벤트 설정 완료 표시
+    codeElement.dataset.eventsSetup = 'true';
+}
+
+copyCodeToClipboard(codeElement) {
+    const text = codeElement.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        T2Utils.showNotification('코드가 클립보드에 복사되었습니다.', 'success');
+    }).catch(() => {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        T2Utils.showNotification('코드가 클립보드에 복사되었습니다.', 'success');
+    });
+}
+
+initializeCodeBlocks() {
+    // 에디터 내의 모든 코드 블록 찾기
+    this.editor.editor.querySelectorAll('.t2-code-block').forEach(codeBlock => {
+        // 이미 초기화된 블록은 스킵
+        if (codeBlock.dataset.initialized === 'true') {
+            return;
+        }
+
+        const codeElement = codeBlock.querySelector('code');
+        
+        if (codeElement) {
+            // contentEditable 속성 확인 및 설정
+            codeBlock.contentEditable = false;
+            codeElement.contentEditable = true;
+            
+            // 이벤트 설정
+            this.setupCodeEvents(codeElement);
+            
+            // 복사 버튼 추가 (기존 컨텐츠에는 툴바를 추가하지 않음)
+            if (!codeBlock.querySelector('.t2-code-block-copy')) {
+                this.addCopyButton(codeBlock);
+            }
+            
+            // 초기화 완료 표시
+            codeBlock.dataset.initialized = 'true';
+        }
+    });
+}
+
+addCopyButton(codeBlock) {
+    // 간단한 복사 버튼만 추가
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 't2-code-block-copy';
+    copyBtn.innerHTML = '<span class="material-icons">content_copy</span>';
+    copyBtn.title = '코드 복사';
+    
+    copyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const codeElement = codeBlock.querySelector('code');
+        if (codeElement) {
+            this.copyCodeToClipboard(codeElement);
+        }
+    });
+    
+    codeBlock.appendChild(copyBtn);
+}
+
+// 사용하지 않는 메서드들 제거 (showCodeLanguageModal, applyCodeSettings, 
+// applySyntaxHighlighting, highlight 메서드들, createCodeToolbar, toggleCodeFullscreen)
+```
+
+}
+
+window.T2CodePlugin = T2CodePlugin;
